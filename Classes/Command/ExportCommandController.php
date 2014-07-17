@@ -37,6 +37,11 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	const PATH = 'typo3temp/tx_coreapi/';
 
 	/**
+	 * @var string
+	 */
+	protected $backupFolder = '';
+
+	/**
 	 * Truncate cache tables
 	 *
 	 * @param string $sure Say YES
@@ -60,10 +65,11 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	 * Export files + database
 	 *
 	 * @param string $prefix
+	 * @param string $backupFolder Alternative path of backup folder
 	 * @return void
 	 */
-	public function allCommand($prefix = '') {
-		$this->createOutputDirectory();
+	public function allCommand($prefix = '', $backupFolder = '') {
+		$this->createOutputDirectory($backupFolder);
 
 		$this->exportDB($prefix);
 		$this->packageFiles($prefix);
@@ -73,22 +79,24 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	 * Export database
 	 *
 	 * @param string $prefix
+	 * @param string $backupFolder Alternative path of backup folder
 	 * @return void
 	 */
-	public function dbCommand($prefix = '') {
-		$this->createOutputDirectory();
+	public function dbCommand($prefix = '', $backupFolder = '') {
+		$this->createOutputDirectory($backupFolder);
 
-		$this->exportDB($prefix);
+		$this->exportDB($prefix, $backupFolder);
 	}
 
 	/**
 	 * Export files
 	 *
 	 * @param string $prefix
+	 * @param string $backupFolder Alternative path of backup folder
 	 * @return void
 	 */
-	public function filesCommand($prefix = '') {
-		$this->createOutputDirectory();
+	public function filesCommand($prefix = '', $backupFolder = '') {
+		$this->createOutputDirectory($backupFolder);
 
 		$this->packageFiles($prefix);
 	}
@@ -108,10 +116,27 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 			'tar zcvf',
 			$target,
 			'-C ' . $path,
-			'fileadmin/',
-			'uploads/',
 			'typo3conf/l10n/',
 		);
+
+		/** @var \TYPO3\CMS\Core\Resource\StorageRepository $storageRepository */
+		$storageRepository = GeneralUtility::makeInstance('TYPO3\\CMS\\Core\\Resource\\StorageRepository');
+		$storages = $storageRepository->findAll();
+		/** @var \TYPO3\CMS\Core\Resource\ResourceStorage */
+		foreach ($storages as $storage) {
+			if ($storage->getDriverType() === 'Local') {
+				$configuration = $storage->getConfiguration();
+				$basePath = '';
+				if (!empty($configuration['basePath'])) {
+					$basePath = trim($configuration['basePath'], '/') . '/';
+				}
+				if ($basePath) {
+					$commandParts[] = $basePath;
+					$storageRecord = $storage->getStorageRecord();
+					$commandParts[] = '--exclude="' . $basePath . ($storageRecord['processingfolder'] ?: \TYPO3\CMS\Core\Resource\ResourceStorageInterface::DEFAULT_ProcessingFolder) . '"';
+				}
+			}
+		}
 
 		$command = implode(' ', $commandParts);
 		shell_exec($command);
@@ -129,7 +154,11 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	protected function exportDB($prefix) {
 		$dbData = $GLOBALS['TYPO3_CONF_VARS']['DB'];
 
-		$path = GeneralUtility::getFileAbsFileName($this->getPath($prefix) . 'db.sql');
+		if (is_dir($this->backupFolder)) {
+			$path = $this->getPath($prefix) . 'db.sql';
+		} else {
+			$path = GeneralUtility::getFileAbsFileName($this->getPath($prefix) . 'db.sql');
+		}
 
 		$commandParts = array(
 			'mysqldump --host=' . $dbData['host'],
@@ -183,13 +212,14 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	/**
 	 * Create directory
 	 *
+	 * @param string $backupFolder
 	 * @return void
 	 */
-	protected function createOutputDirectory() {
-		$path = PATH_site . self::PATH;
+	protected function createOutputDirectory($backupFolder) {
+		$this->backupFolder = rtrim($backupFolder ?: PATH_site . self::PATH, '/') . '/';
 
-		if (!is_dir($path)) {
-			GeneralUtility::mkdir($path);
+		if (!is_dir($this->backupFolder)) {
+			GeneralUtility::mkdir($this->backupFolder);
 		}
 	}
 
@@ -200,7 +230,7 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	 * @return string
 	 */
 	protected function getPath($prefix) {
-		$path = PATH_site . self::PATH;
+		$path = $this->backupFolder;
 
 		if (!empty($prefix) && preg_match('/^[a-z0-9_\\-]{2,}$/i', $prefix)) {
 			$path .= $prefix;

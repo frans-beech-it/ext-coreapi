@@ -140,7 +140,7 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 
 		$command = implode(' ', $commandParts);
 		shell_exec($command);
-		shell_exec('chmod 777 ' . $target);
+		shell_exec('chmod 664 ' . $target);
 
 		$this->outputLine('The dump has been saved to "%s" and got a size of "%s".', array($target, GeneralUtility::formatSize(filesize($target))));
 	}
@@ -169,7 +169,7 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 
 		$command = implode(' ', $commandParts);
 		shell_exec($command);
-		shell_exec('chmod 777 ' . $path);
+		shell_exec('chmod 664 ' . $path);
 
 		$this->outputLine('The dump has been saved to "%s" and got a size of "%s".', array($path, GeneralUtility::formatSize(filesize($path))));
 	}
@@ -193,7 +193,7 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	 */
 	protected function getNotNeededTables() {
 		$tables = array();
-		$truncatedPrefixes = array('cf_', 'cache_', 'index_', 'tx_extensionmanager_domain_model_extension', 'sys_lockedrecords');
+		$truncatedPrefixes = array('cf_', 'cache_', 'index_', 'tx_extensionmanager_domain_model_extension', 'sys_lockedrecords', 'be_sessions');
 
 		$tableList = array_keys($GLOBALS['TYPO3_DB']->admin_get_tables());
 		foreach ($tableList as $tableName) {
@@ -216,7 +216,7 @@ class ExportCommandController extends \TYPO3\CMS\Extbase\Mvc\Controller\CommandC
 	 * @return void
 	 */
 	protected function createOutputDirectory($backupFolder) {
-		$this->backupFolder = rtrim($backupFolder ?: PATH_site . self::PATH, '/') . '/';
+		$this->backupFolder = rtrim(realpath($backupFolder ?: PATH_site . self::PATH), '/') . '/';
 
 		if (!is_dir($this->backupFolder)) {
 			GeneralUtility::mkdir($this->backupFolder);
